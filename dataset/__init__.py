@@ -28,7 +28,7 @@ def build_dataloader(config, is_train=True):
         label_dir = config['val_label_dir']
         shuffle = False
         
-    dataset = PointSupervisedDataset(img_dir, label_dir)
+    dataset = PointSupervisedDataset(img_dir, label_dir, is_train=is_train)
     
     batch_size = config.get('batch_size', 8)
     
