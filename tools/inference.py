@@ -37,7 +37,12 @@ def main():
     # 加载权重
     if os.path.exists(args.weights):
         print(f"Loading weights from {args.weights}")
-        model.load_state_dict(torch.load(args.weights, map_location=device))
+        checkpoint = torch.load(args.weights, map_location=device)
+        # 如果是包含了完整状态字典的 checkpoint，提取 model_state_dict
+        if 'model_state_dict' in checkpoint:
+            model.load_state_dict(checkpoint['model_state_dict'])
+        else:
+            model.load_state_dict(checkpoint)
     else:
         print(f"Warning: Weights file {args.weights} not found. Using random weights.")
         
@@ -73,6 +78,7 @@ def main():
     # 筛选
     keep = scores > args.conf_thresh
     final_scores = scores[keep]
+    final_labels = labels[keep]
     final_points = pred_points[keep]
     
     # 可视化
@@ -81,13 +87,19 @@ def main():
     
     for i in range(len(final_scores)):
         norm_x, norm_y = final_points[i].cpu().numpy()
+        class_id = final_labels[i].item()
         
         # 还原坐标
         x = int(norm_x * orig_w)
         y = int(norm_y * orig_h)
         
         # 画红色圆点
-        cv2.circle(result_img, (x, y), radius=4, color=(0, 0, 255), thickness=-1)
+        cv2.circle(result_img, (x, y), radius=3, color=(0, 0, 255), thickness=-1)
+        
+        # 画类别文本 (绿色，右上偏移)
+        text = f"C{class_id}"
+        cv2.putText(result_img, text, (x + 5, y - 5), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 1)
+        
         count += 1
         
     # 保存结果

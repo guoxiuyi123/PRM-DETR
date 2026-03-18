@@ -52,15 +52,17 @@ def main():
     weight_dict = {"loss_ce": 1.0, "loss_point": 5.0}
     criterion = PointCriterion(num_classes=config['num_classes'], matcher=matcher, weight_dict=weight_dict).to(device)
 
-    # 6. 设置优化器
+    # 6. 设置优化器和学习率调度器
     optimizer = optim.AdamW(model.parameters(), lr=1e-4)
+    lr_scheduler = optim.lr_scheduler.MultiStepLR(optimizer, milestones=[40], gamma=0.1)
     torch.backends.cudnn.benchmark = True # 开启底层加速
     
     # 初始化验证器
     evaluator = PointEvaluator(distance_thresholds=[0.01, 0.05, 0.1])
 
     # 7. 运行训练循环
-    num_epochs = 10
+    num_epochs = 50
+    log_file = open('train_log.txt', 'a')
     print(f"Starting training loop for {num_epochs} epochs...")
     
     for epoch in range(1, num_epochs + 1):
@@ -96,10 +98,19 @@ def main():
             if batch_idx % 50 == 0:
                 loss_ce = loss_dict['loss_ce'].item()
                 loss_point = loss_dict['loss_point'].item()
-                print(f"Epoch [{epoch}/{num_epochs}][{batch_idx}/{len(train_loader)}] | loss_ce: {loss_ce:.4f} | loss_point: {loss_point:.4f} | Total: {total_loss.item():.4f}")
+                log_str = f"Epoch [{epoch}/{num_epochs}][{batch_idx}/{len(train_loader)}] | loss_ce: {loss_ce:.4f} | loss_point: {loss_point:.4f} | Total: {total_loss.item():.4f}"
+                print(log_str)
+                log_file.write(log_str + '\n')
+                log_file.flush()
         
         avg_train_loss = total_train_loss / len(train_loader)
-        print(f"Epoch {epoch} finished. Avg Train Loss: {avg_train_loss:.4f}")
+        avg_log_str = f"Epoch {epoch} finished. Avg Train Loss: {avg_train_loss:.4f}"
+        print(avg_log_str)
+        log_file.write(avg_log_str + '\n')
+        log_file.flush()
+        
+        # 学习率步进
+        lr_scheduler.step()
         
         # --- 验证阶段 ---
         print("Running validation...")
@@ -131,9 +142,26 @@ def main():
                     )
                     
         # 累积并打印指标
-        evaluator.accumulate()
+        aps = evaluator.accumulate()
         print("-" * 50)
+        
+        # 将验证结果写入日志
+        log_file.write(f"Epoch {epoch} Validation Results:\n")
+        for k, v in aps.items():
+            log_file.write(f"  {k} : {v:.4f}\n")
+        log_file.flush()
+        
+        # 保存权重
+        os.makedirs('checkpoints', exist_ok=True)
+        torch.save({
+            'epoch': epoch,
+            'model_state_dict': model.state_dict(),
+            'optimizer_state_dict': optimizer.state_dict(),
+            'lr_scheduler_state_dict': lr_scheduler.state_dict(),
+        }, 'checkpoints/prm_detr_latest.pth')
+        print(f"🚀 Epoch {epoch} 权重已成功保存...")
 
+    log_file.close()
     print("Training loop finished successfully!")
 
 if __name__ == "__main__":
