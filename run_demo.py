@@ -67,7 +67,7 @@ def main():
     print(f"✅ 成功加载权重 (Epoch {checkpoint.get('epoch', 'unknown')})")
 
     # 2. 读取图片
-    img_name = '000005.jpg' 
+    img_name = '009961.jpg' 
     img_path = f'/home/pc/gxy/WS-TFA/data/VOCdevkit/VOC2007/JPEGImages/{img_name}'
     
     if not os.path.exists(img_path):

@@ -53,67 +53,39 @@ class PositionEmbeddingSine(nn.Module):
         pos = torch.cat((pos_y, pos_x), dim=3).permute(0, 3, 1, 2)
         return pos
 
-class Sparsemax(nn.Module):
+class Sparsemax(torch.nn.Module):
     """
     Sparsemax activation function.
     Projects the input onto the probability simplex, resulting in sparse probabilities.
     Replaces Softmax to force low-confidence noisy proposals to exactly 0.
     """
 
-    def __init__(self, dim: int = -1):
-        """
-        Args:
-            dim (int): The dimension over which to compute Sparsemax.
-                       For MIL over proposals, this is typically the proposal dimension (dim=1).
-        """
+    def __init__(self, dim=-1):
         super().__init__()
         self.dim = dim
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
-        """
-        Forward pass for Sparsemax.
-        
-        Args:
-            x (torch.Tensor): Input tensor.
-            
-        Returns:
-            torch.Tensor: Sparsemax output tensor.
-        """
-        # Shift input for numerical stability
         x_max, _ = torch.max(x, dim=self.dim, keepdim=True)
         z = x - x_max
-
-        # Sort z in descending order
         zs, _ = torch.sort(z, dim=self.dim, descending=True)
         
-        # Calculate k(z)
         range_vec = torch.arange(1, zs.size(self.dim) + 1, dtype=x.dtype, device=x.device)
-        # Reshape range_vec to match z dimensions for broadcasting
         shape = [1] * z.dim()
         shape[self.dim] = -1
         range_vec = range_vec.view(*shape)
 
-        # Cumulative sum of sorted z
-        bound = 1.0 + range_vec * zs
         cumsum_zs = torch.cumsum(zs, dim=self.dim)
+        bound = 1.0 + range_vec * zs
         
-        # Find k(z)
-        is_gt = cumsum_zs > bound
-        # Count how many elements are valid (k). 
-        # Using argmax on the boolean mask or summing the inverse condition
-        k = (cumsum_zs > bound - zs).sum(dim=self.dim, keepdim=True)
-
-        # Compute tau(z)
-        # We need to gather the value at index k-1 from cumsum_zs
+        # 🚨 修复核心：这才是绝对正确的数学条件 (1.0 > 0.0 永远成立，保证 k >= 1)
+        is_valid = bound > cumsum_zs
+        k = is_valid.sum(dim=self.dim, keepdim=True)
+        
         k_idx = torch.clamp(k - 1, min=0)
         sum_k = torch.gather(cumsum_zs, self.dim, k_idx)
         tau = (sum_k - 1.0) / k.to(x.dtype)
 
-        # Output projection
         p = torch.clamp(z - tau, min=0.0)
-        
-        # Ensure exact sum to 1 over self.dim to handle float precision issues
-        p = p / (p.sum(dim=self.dim, keepdim=True) + 1e-8)
         return p
 
 
@@ -204,13 +176,13 @@ class ClassAgnosticDETR(nn.Module):
         
         # Prepare queries [B, num_queries, hidden_dim]
         query_embeds = self.query_embed.weight.unsqueeze(0).repeat(B, 1, 1)
-        # Dummy target for decoder (initialized to zeros)
-        tgt = torch.zeros_like(query_embeds)
 
         # Transformer Forward Pass
         # Encoder takes features, Decoder takes queries
         memory = self.transformer.encoder(features_with_pos)
-        hs = self.transformer.decoder(tgt, memory, tgt_key_padding_mask=None, memory_key_padding_mask=None)
+        # Use query_embeds as the target sequence for the decoder so that each query 
+        # has a unique identity, preventing them from producing identical outputs.
+        hs = self.transformer.decoder(query_embeds, memory)
         
         # Generate predictions
         bboxes = self.bbox_head(hs)

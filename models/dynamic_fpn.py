@@ -40,10 +40,9 @@ class FusionFactorModule(nn.Module):
             nn.Conv2d(in_channels * 2, inter_channels, kernel_size=1, bias=False),
             nn.BatchNorm2d(inter_channels),
             nn.ReLU(inplace=True),
-            # Output a single channel for the spatial alpha, or we can use GAP to output [B, 1, 1, 1]
+            # Output a single channel for the spatial alpha
             nn.Conv2d(inter_channels, 1, kernel_size=1, bias=True)
         )
-        self.gap = nn.AdaptiveAvgPool2d(1)
         self.sigmoid = nn.Sigmoid()
 
     def forward(self, deep_feat: torch.Tensor, shallow_feat: torch.Tensor) -> torch.Tensor:
@@ -55,7 +54,7 @@ class FusionFactorModule(nn.Module):
             shallow_feat (torch.Tensor): Lateral feature map from shallower layer.
 
         Returns:
-            torch.Tensor: Dynamic weight factor alpha of shape (B, 1, 1, 1).
+            torch.Tensor: Dynamic spatial weight factor alpha of shape (B, 1, H, W).
         """
         # Ensure spatial dimensions match (handle potential odd sizes)
         if deep_feat.shape[2:] != shallow_feat.shape[2:]:
@@ -64,10 +63,9 @@ class FusionFactorModule(nn.Module):
         # Concatenate along channel dimension
         concat_feat = torch.cat([deep_feat, shallow_feat], dim=1)
 
-        # Compute alpha: (B, 2C, H, W) -> (B, 1, H, W) -> (B, 1, 1, 1) -> Sigmoid
+        # Compute alpha: (B, 2C, H, W) -> (B, 1, H, W) -> Sigmoid
         x = self.conv(concat_feat)
-        alpha = self.gap(x)
-        alpha = self.sigmoid(alpha)
+        alpha = self.sigmoid(x)
 
         return alpha
 

@@ -75,11 +75,6 @@ def predict(
             # Find maximum probability and corresponding class for each query
             scores, labels = probs.max(dim=-1) # scores: [300], labels: [300]
             
-            # For testing with random initialized weights, Sparsemax might force all to 0
-            # Let's add a small offset for testing if all are 0
-            if scores.max() <= 1e-6:
-                scores = torch.rand_like(scores)
-            
             # 3. Confidence Filtering
             keep_mask = scores > conf_threshold
             

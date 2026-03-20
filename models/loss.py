@@ -64,19 +64,14 @@ class WSTFALoss(nn.Module):
         # ==========================================
         # 1. MIL Loss (Image-Level Classification)
         # ==========================================
-        # Instead of simple sum which can easily exceed 1 and require clamping (causing gradient saturation),
-        # we use Log-Sum-Exp (LSE) pooling or Noisy-OR.
-        # Let's use a standard Noisy-OR formulation for MIL probabilities: P(y=1) = 1 - prod(1 - p_i)
-        # To avoid numerical underflow, we do this in log space if possible, or just clamp securely.
+        # 直接提取每张图片在每个类别上的最高置信度 (Max-Pooling) 
+        image_level_probs = final_prob.max(dim=1)[0] 
         
-        # P_image = 1 - prod_i (1 - p_i)
-        # Using clamp to ensure 1 - final_prob is strictly > 0
-        not_prob = torch.clamp(1.0 - final_prob, min=1e-6)
-        image_level_probs = 1.0 - torch.prod(not_prob, dim=1)
+        # 裁剪概率以防极端值导致 log(0) 崩溃 
+        image_level_probs = torch.clamp(image_level_probs, min=1e-6, max=1.0 - 1e-6) 
         
-        # Convert to logits for BCEWithLogitsLoss
-        image_level_probs = torch.clamp(image_level_probs, min=1e-6, max=1.0 - 1e-6)
-        image_level_logits = torch.logit(image_level_probs, eps=1e-6)
+        # 将概率安全地逆转为 Logits，完美对接 BCEWithLogitsLoss 
+        image_level_logits = torch.logit(image_level_probs) 
         mil_loss = self.bce_loss(image_level_logits, image_labels.float())
 
         # ==========================================

@@ -15,7 +15,7 @@ from data.voc_dataset import WSOD_VOCDataset, get_wsod_transforms, VOC_CLASSES
 def parse_args():
     parser = argparse.ArgumentParser(description="Train WS-TFA on PASCAL VOC")
     parser.add_argument('--data_dir', type=str, default='/home/pc/gxy/WS-TFA/data', help='Path to VOC dataset')
-    parser.add_argument('--epochs', type=int, default=20, help='Number of training epochs')
+    parser.add_argument('--epochs', type=int, default=10, help='Number of training epochs')
     parser.add_argument('--batch_size', type=int, default=4, help='Batch size (adjust based on VRAM)')
     parser.add_argument('--lr_backbone', type=float, default=1e-5, help='Learning rate for backbone')
     parser.add_argument('--lr_transformer', type=float, default=1e-4, help='Learning rate for FPN and Transformer Head')
