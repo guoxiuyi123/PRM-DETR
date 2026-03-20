@@ -31,6 +31,6 @@ venv.bak/
 .idea/
 .DS_Store
 *.swp
-
+.jpg
 # Jupyter Notebook
 .ipynb_checkpoints

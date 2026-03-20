@@ -29,11 +29,7 @@ class WSTFALoss(nn.Module):
         self.box_loss_weight = box_loss_weight
         self.top_k_pseudo = top_k_pseudo
         
-        # BCEWithLogitsLoss is generally more numerically stable than BCELoss
-        # but requires raw logits. Since final_prob is bounded [0,1], we can stick
-        # to BCELoss or use an epsilon clamp. For WSOD, aggregating over all proposals
-        # and then applying BCE is standard.
-        self.bce_loss = nn.BCELoss(reduction='mean')
+        self.bce_loss = nn.BCEWithLogitsLoss(reduction='mean')
         self.l1_loss = nn.L1Loss(reduction='mean')
 
     def forward(
@@ -68,10 +64,9 @@ class WSTFALoss(nn.Module):
         # ==========================================
         # 1. MIL Loss (Image-Level Classification)
         # ==========================================
-        # Aggregate proposal-level probabilities to image-level probabilities using Sum Pooling.
-        # We clamp to [1e-6, 1.0 - 1e-6] to avoid log(0) in BCE.
-        image_level_preds = torch.clamp(final_prob.sum(dim=1), min=1e-6, max=1.0 - 1e-6) # [B, num_classes]
-        mil_loss = self.bce_loss(image_level_preds, image_labels.float())
+        image_level_probs = final_prob.sum(dim=1).clamp(min=1e-6, max=1.0 - 1e-6)
+        image_level_logits = torch.logit(image_level_probs, eps=1e-6)
+        mil_loss = self.bce_loss(image_level_logits, image_labels.float())
 
         # ==========================================
         # 2. Alpha Regularization
